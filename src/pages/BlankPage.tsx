@@ -325,10 +325,12 @@ const BlankPage = () => {
     
     setIsLoadingWallet(true);
     try {
+      console.log('Buscando referral para wallet:', walletAddress);
+      
       const { data, error } = await supabase
         .from('wallets')
-        .select('id, referral_used')
-        .eq('wallet_address', walletAddress)
+        .select('referral_used')
+        .eq('wallet_address', walletAddress.toLowerCase())
         .single();
 
       if (error) {
@@ -336,8 +338,14 @@ const BlankPage = () => {
         return;
       }
 
+      console.log('Dados encontrados:', data);
+
       if (data?.referral_used) {
+        console.log('Referral encontrado:', data.referral_used);
         setReferralCode(data.referral_used);
+      } else {
+        console.log('Nenhum referral encontrado');
+        setReferralCode(null);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -347,13 +355,16 @@ const BlankPage = () => {
   };
 
   // Modificar o input da wallet para incluir a busca de referral
-  const handleManualWalletChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleManualWalletChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const newWalletAddress = e.target.value;
     setManualWallet(newWalletAddress);
     
+    // Limpa o referral atual quando o endereço é alterado
+    setReferralCode(null);
+    
     // Se for um endereço válido, busca o referral
     if (isValidWalletAddress(newWalletAddress)) {
-      fetchReferralForManualWallet(newWalletAddress);
+      await fetchReferralForManualWallet(newWalletAddress);
     }
   };
 
@@ -590,10 +601,7 @@ const BlankPage = () => {
                   />
                   {isLoadingWallet && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <svg className="animate-spin h-5 w-5 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-500 border-t-transparent"></div>
                     </div>
                   )}
                   {manualWallet && !isValidWalletAddress(manualWallet) && (
