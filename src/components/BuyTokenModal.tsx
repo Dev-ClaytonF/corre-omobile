@@ -604,7 +604,26 @@ const BuyTokenModal = ({ isOpen, onClose }: BuyTokenModalProps) => {
     };
 
     const handlePixPayment = () => {
-        navigate('/pix-generator');
+        // Pega a wallet atual
+        const currentWallet = activeAccount?.address;
+        
+        // Busca o referral do localStorage ou URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const referralFromUrl = urlParams.get('ref');
+        const referralFromStorage = localStorage.getItem('referralCode');
+        const referral = referralFromUrl || referralFromStorage;
+
+        // Constrói a URL com os parâmetros
+        const pixUrl = new URL('/pix-generator', window.location.origin);
+        if (currentWallet) {
+            pixUrl.searchParams.set('wallet', currentWallet);
+        }
+        if (referral) {
+            pixUrl.searchParams.set('referral', referral);
+        }
+
+        // Navega para a página do PIX
+        navigate(pixUrl.toString());
         onClose();
     };
 
