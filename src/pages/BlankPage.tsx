@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAccount } from 'wagmi';
 import { supabase } from '../utils/supabase';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 interface TransactionStatus {
   id: string;
@@ -32,60 +32,11 @@ interface ExchangeRates {
 const BlankPage = () => {
   const { address, isConnected } = useAccount();
   const navigate = useNavigate();
-  const location = useLocation();
   const [showNotification, setShowNotification] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [manualWallet, setManualWallet] = useState('');
   const [showWalletWarning, setShowWalletWarning] = useState(false);
-  const [isLoadingWallet, setIsLoadingWallet] = useState(false);
-  const [pageLoading, setPageLoading] = useState(true);
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-  // Efeito para carregar dados da URL ou localStorage
-  useEffect(() => {
-    const loadWalletAndReferral = async () => {
-      try {
-        // Tenta pegar da URL primeiro
-        const params = new URLSearchParams(location.search);
-        const urlWallet = params.get('wallet');
-        const urlReferral = params.get('referral');
-
-        // Se não tem na URL, tenta pegar do localStorage
-        const storedWallet = localStorage.getItem('pixWallet');
-        const storedReferral = localStorage.getItem('pixReferral');
-
-        if (urlWallet) {
-          setManualWallet(urlWallet);
-          if (isValidWalletAddress(urlWallet)) {
-            await fetchReferralForManualWallet(urlWallet);
-          }
-        } else if (storedWallet) {
-          setManualWallet(storedWallet);
-          if (isValidWalletAddress(storedWallet)) {
-            await fetchReferralForManualWallet(storedWallet);
-          }
-        }
-
-        if (urlReferral) {
-          setReferralCode(urlReferral);
-        } else if (storedReferral) {
-          setReferralCode(storedReferral);
-        }
-      } finally {
-        setPageLoading(false);
-      }
-    };
-
-    loadWalletAndReferral();
-  }, [location]);
-
-  if (pageLoading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-2 border-purple-500 border-t-transparent"></div>
-      </div>
-    );
-  }
 
   // Modal de Notificação
   const NotificationModal = () => {
@@ -151,14 +102,14 @@ const BlankPage = () => {
       isMobile
     });
 
-    // Em dispositivos móveis, apenas mostra o aviso se não houver wallet na URL
-    if (isMobile) {
-      const params = new URLSearchParams(window.location.search);
-      const urlWallet = params.get('wallet');
-      
-      if (!isConnected && !urlWallet) {
-        setShowWalletWarning(true);
-      }
+    // Em dispositivos móveis, copia a wallet conectada automaticamente
+    if (isMobile && address) {
+      setManualWallet(address);
+    }
+
+    // Em dispositivos móveis, apenas mostra o aviso
+    if (isMobile && !isConnected) {
+      setShowWalletWarning(true);
       setIsInitialLoad(false);
       return;
     }
@@ -372,63 +323,6 @@ const BlankPage = () => {
     return address;
   };
 
-  // Função para buscar o referral quando uma wallet válida é inserida manualmente
-  const fetchReferralForManualWallet = async (walletAddress: string) => {
-    if (!isValidWalletAddress(walletAddress)) return;
-    
-    setIsLoadingWallet(true);
-    try {
-      console.log('Buscando referral para wallet:', walletAddress);
-      
-      const { data, error } = await supabase
-        .from('wallets')
-        .select('referral_used')
-        .eq('wallet_address', walletAddress.toLowerCase())
-        .single();
-
-      if (error) {
-        console.error('Error fetching referral:', error);
-        return;
-      }
-
-      console.log('Dados encontrados:', data);
-
-      if (data?.referral_used) {
-        console.log('Referral encontrado:', data.referral_used);
-        setReferralCode(data.referral_used);
-        localStorage.setItem('pixReferral', data.referral_used);
-      } else {
-        console.log('Nenhum referral encontrado');
-        setReferralCode(null);
-        localStorage.removeItem('pixReferral');
-      }
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setIsLoadingWallet(false);
-    }
-  };
-
-  // Modificar o input da wallet para incluir a busca de referral
-  const handleManualWalletChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newWalletAddress = e.target.value;
-    setManualWallet(newWalletAddress);
-    
-    // Salva no localStorage
-    if (isValidWalletAddress(newWalletAddress)) {
-      localStorage.setItem('pixWallet', newWalletAddress);
-    }
-    
-    // Limpa o referral atual quando o endereço é alterado
-    setReferralCode(null);
-    localStorage.removeItem('pixReferral');
-    
-    // Se for um endereço válido, busca o referral
-    if (isValidWalletAddress(newWalletAddress)) {
-      await fetchReferralForManualWallet(newWalletAddress);
-    }
-  };
-
   const generatePix = async () => {
     const currentWalletAddress = getWalletAddress();
 
@@ -618,9 +512,6 @@ const BlankPage = () => {
     // Limpa os intervalos se existirem
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
-    // Limpa localStorage
-    localStorage.removeItem('pixWallet');
-    localStorage.removeItem('pixReferral');
     // Redireciona para a página anterior
     window.history.back();
   };
@@ -659,15 +550,10 @@ const BlankPage = () => {
                   <input
                     type="text"
                     value={manualWallet}
-                    onChange={handleManualWalletChange}
+                    onChange={(e) => setManualWallet(e.target.value)}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
                     placeholder="Enter your wallet address (0x...)"
                   />
-                  {isLoadingWallet && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-purple-500 border-t-transparent"></div>
-                    </div>
-                  )}
                   {manualWallet && !isValidWalletAddress(manualWallet) && (
                     <p className="text-red-400 text-xs mt-1">Please enter a valid wallet address</p>
                   )}
