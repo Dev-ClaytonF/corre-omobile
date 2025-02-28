@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAccount } from 'wagmi';
 import { supabase } from '../utils/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface TransactionStatus {
   id: string;
@@ -32,12 +32,60 @@ interface ExchangeRates {
 const BlankPage = () => {
   const { address, isConnected } = useAccount();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showNotification, setShowNotification] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [manualWallet, setManualWallet] = useState('');
   const [showWalletWarning, setShowWalletWarning] = useState(false);
   const [isLoadingWallet, setIsLoadingWallet] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+  // Efeito para carregar dados da URL ou localStorage
+  useEffect(() => {
+    const loadWalletAndReferral = async () => {
+      try {
+        // Tenta pegar da URL primeiro
+        const params = new URLSearchParams(location.search);
+        const urlWallet = params.get('wallet');
+        const urlReferral = params.get('referral');
+
+        // Se não tem na URL, tenta pegar do localStorage
+        const storedWallet = localStorage.getItem('pixWallet');
+        const storedReferral = localStorage.getItem('pixReferral');
+
+        if (urlWallet) {
+          setManualWallet(urlWallet);
+          if (isValidWalletAddress(urlWallet)) {
+            await fetchReferralForManualWallet(urlWallet);
+          }
+        } else if (storedWallet) {
+          setManualWallet(storedWallet);
+          if (isValidWalletAddress(storedWallet)) {
+            await fetchReferralForManualWallet(storedWallet);
+          }
+        }
+
+        if (urlReferral) {
+          setReferralCode(urlReferral);
+        } else if (storedReferral) {
+          setReferralCode(storedReferral);
+        }
+      } finally {
+        setPageLoading(false);
+      }
+    };
+
+    loadWalletAndReferral();
+  }, [location]);
+
+  if (pageLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-2 border-purple-500 border-t-transparent"></div>
+      </div>
+    );
+  }
 
   // Modal de Notificação
   const NotificationModal = () => {
@@ -103,9 +151,14 @@ const BlankPage = () => {
       isMobile
     });
 
-    // Em dispositivos móveis, apenas mostra o aviso
-    if (isMobile && !isConnected) {
-      setShowWalletWarning(true);
+    // Em dispositivos móveis, apenas mostra o aviso se não houver wallet na URL
+    if (isMobile) {
+      const params = new URLSearchParams(window.location.search);
+      const urlWallet = params.get('wallet');
+      
+      if (!isConnected && !urlWallet) {
+        setShowWalletWarning(true);
+      }
       setIsInitialLoad(false);
       return;
     }
@@ -343,9 +396,11 @@ const BlankPage = () => {
       if (data?.referral_used) {
         console.log('Referral encontrado:', data.referral_used);
         setReferralCode(data.referral_used);
+        localStorage.setItem('pixReferral', data.referral_used);
       } else {
         console.log('Nenhum referral encontrado');
         setReferralCode(null);
+        localStorage.removeItem('pixReferral');
       }
     } catch (error) {
       console.error('Error:', error);
@@ -359,8 +414,14 @@ const BlankPage = () => {
     const newWalletAddress = e.target.value;
     setManualWallet(newWalletAddress);
     
+    // Salva no localStorage
+    if (isValidWalletAddress(newWalletAddress)) {
+      localStorage.setItem('pixWallet', newWalletAddress);
+    }
+    
     // Limpa o referral atual quando o endereço é alterado
     setReferralCode(null);
+    localStorage.removeItem('pixReferral');
     
     // Se for um endereço válido, busca o referral
     if (isValidWalletAddress(newWalletAddress)) {
@@ -557,6 +618,9 @@ const BlankPage = () => {
     // Limpa os intervalos se existirem
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
+    // Limpa localStorage
+    localStorage.removeItem('pixWallet');
+    localStorage.removeItem('pixReferral');
     // Redireciona para a página anterior
     window.history.back();
   };
