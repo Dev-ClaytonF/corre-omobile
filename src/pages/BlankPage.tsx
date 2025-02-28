@@ -36,6 +36,7 @@ const BlankPage = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [manualWallet, setManualWallet] = useState('');
   const [showWalletWarning, setShowWalletWarning] = useState(false);
+  const [isLoadingWallet, setIsLoadingWallet] = useState(false);
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
   // Modal de Notificação
@@ -318,6 +319,44 @@ const BlankPage = () => {
     return address;
   };
 
+  // Função para buscar o referral quando uma wallet válida é inserida manualmente
+  const fetchReferralForManualWallet = async (walletAddress: string) => {
+    if (!isValidWalletAddress(walletAddress)) return;
+    
+    setIsLoadingWallet(true);
+    try {
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('id, referral_used')
+        .eq('wallet_address', walletAddress)
+        .single();
+
+      if (error) {
+        console.error('Error fetching referral:', error);
+        return;
+      }
+
+      if (data?.referral_used) {
+        setReferralCode(data.referral_used);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setIsLoadingWallet(false);
+    }
+  };
+
+  // Modificar o input da wallet para incluir a busca de referral
+  const handleManualWalletChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newWalletAddress = e.target.value;
+    setManualWallet(newWalletAddress);
+    
+    // Se for um endereço válido, busca o referral
+    if (isValidWalletAddress(newWalletAddress)) {
+      fetchReferralForManualWallet(newWalletAddress);
+    }
+  };
+
   const generatePix = async () => {
     const currentWalletAddress = getWalletAddress();
 
@@ -545,10 +584,18 @@ const BlankPage = () => {
                   <input
                     type="text"
                     value={manualWallet}
-                    onChange={(e) => setManualWallet(e.target.value)}
+                    onChange={handleManualWalletChange}
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-purple-500"
                     placeholder="Enter your wallet address (0x...)"
                   />
+                  {isLoadingWallet && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <svg className="animate-spin h-5 w-5 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </div>
+                  )}
                   {manualWallet && !isValidWalletAddress(manualWallet) && (
                     <p className="text-red-400 text-xs mt-1">Please enter a valid wallet address</p>
                   )}
